@@ -1,12 +1,14 @@
 use std::net::Ipv4Addr;
 
-use axum::{Router, routing::get, response::{Response, IntoResponse}, http::StatusCode};
+use axum::{Router, routing::get, response::{Response, IntoResponse}, http::{StatusCode, self,}, middleware::{Next, self}, extract::Request};
 use otel::setup_otel;
 use tower_http::trace::{TraceLayer, self};
 use tracing::Level;
 
 pub mod otel;
 pub mod util_routes;
+
+const AUTH_TOKEN_KEY: &'static str = "TOKEN";
 
 #[tokio::main]
 async fn main() {
@@ -17,7 +19,8 @@ async fn main() {
 
     let app = Router::new()
         .route("/", get(root))
-        // .route_layer(middleware::from_fn(auth_guard::auth)) // All routes above will require 'access_token' cookie
+        .route("/protected", get(protected))
+        .route_layer(middleware::from_fn(auth)) // All routes above will require 'auth'
         // .route("/auth/login", post(auth_routes::user_login))
         // .route("/auth/account", post(user_routes::create_user))
         .layer(
@@ -39,4 +42,44 @@ async fn main() {
 #[tracing::instrument]
 pub async fn root() -> Result<Response, StatusCode> {
     Ok((StatusCode::BAD_REQUEST, format!("This is the root endpoint")).into_response())
+}
+
+#[tracing::instrument]
+pub async fn protected() -> Result<Response, StatusCode> {
+    Ok((StatusCode::OK, format!("This is the protected endpoint, you must be logged in!")).into_response())
+}
+
+#[tracing::instrument(skip_all, err)]
+pub async fn auth(
+    req: Request,
+    next: Next,
+) -> Result<Response, StatusCode> {
+    let token = extract_access_token(&req)?;
+
+    tracing::info!("token: {token:#?}");
+    tracing::info!("req: {req:#?}");
+
+    if token != "yersh" {
+        tracing::warn!("invalid token '{token}', was provided");
+        Err(StatusCode::UNAUTHORIZED)
+    } else {
+        tracing::info!("token was valid!");
+        Ok(next.run(req).await)
+    }
+}
+
+#[tracing::instrument(skip_all, err)]
+fn extract_access_token(req: &Request) -> Result<String, StatusCode> {
+    if let Some(cookie_header) = req.headers().get(http::header::COOKIE) {
+        let cookies: Vec<_> = cookie_header.to_str().unwrap().split(';').collect();
+        for cookie in cookies {
+            if cookie.contains(AUTH_TOKEN_KEY) {
+                let jwt_access_token =
+                    cookie.replace(&format!("{}=", AUTH_TOKEN_KEY), "");
+                tracing::trace!("extracted jwt from headers");
+                return Ok(jwt_access_token);
+            }
+        }
+    }
+    Err(StatusCode::UNAUTHORIZED)
 }

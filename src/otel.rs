@@ -41,7 +41,7 @@ pub fn setup_otel() -> OtelGuard {
     let filter = if std::env::var("RUST_LOG").is_ok() {
         EnvFilter::builder().from_env_lossy()
     } else {
-        "warn,auth_ex=debug"
+        format!("info,{pkg_name}=debug", pkg_name=env!("CARGO_PKG_NAME").replace("-", "_"))
             .parse()
             .expect("valid EnvFilter value can be parsed")
     };
