@@ -4,3 +4,27 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+anyhow = "1.0.86"
+axum = "0.7.5"
+env_logger = "0.11.5"
+passkey = "0.2.0"
+serde = { version = "1.0.204", features = ["derive"] }
+serde_json = "1.0.120"
+thiserror = "1.0.63"
+tokio = { version = "1.39.2", features = ["full"] }
+
+tracing = "0.1.40"
+tracing-log = "0.2.0"
+tracing-core = "0.1.28"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "registry"] }
+tracing-opentelemetry = "0.22"
+opentelemetry = { version = "0.21", features = ["trace", "metrics"] }
+opentelemetry_sdk = { version = "0.21.2", features = ["trace", "rt-tokio"] }
+opentelemetry-otlp = { version = "0.14.0", features = ["metrics"] }
+opentelemetry-stdout = { version = "0.2.0", features = ["trace", "metrics"] }
+opentelemetry-semantic-conventions = "0.13.0"
+tower-http = { version = "0.5.2", features = ["trace"] }
+
+[dev-dependencies]
+pretty_assertions = "1.4.0"
+rstest = "0.21.0"
