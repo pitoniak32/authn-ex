@@ -32,8 +32,8 @@ pub fn setup_otel() -> OtelGuard {
 
     let otel_layer = std::env::var("OTEL_COLLECTOR_URL").map_or_else(
         |_| {
-          println!("No collector url found.");
-          None
+            println!("No collector url found.");
+            None
         },
         |url| Some(OpenTelemetryLayer::new(init_tracer(&url))),
     );
@@ -41,9 +41,12 @@ pub fn setup_otel() -> OtelGuard {
     let filter = if std::env::var("RUST_LOG").is_ok() {
         EnvFilter::builder().from_env_lossy()
     } else {
-        format!("info,{pkg_name}=debug", pkg_name=env!("CARGO_PKG_NAME").replace("-", "_"))
-            .parse()
-            .expect("valid EnvFilter value can be parsed")
+        format!(
+            "info,{pkg_name}=debug",
+            pkg_name = env!("CARGO_PKG_NAME").replace("-", "_")
+        )
+        .parse()
+        .expect("valid EnvFilter value can be parsed")
     };
 
     tracing_subscriber::registry()
