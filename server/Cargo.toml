@@ -27,6 +27,13 @@ opentelemetry-semantic-conventions = "0.13.0"
 tower-http = { version = "0.5.2", features = ["trace"] }
 coset = "0.3.8"
 base64 = "0.22.1"
+tower-sessions = "0.12.2"
+axum-extra = { version = "0.9.3", features = ["typed-header", "cookie"] }
+chrono = "0.4.38"
+jsonwebtoken = "9.3.0"
+once_cell = "1.19.0"
+rand = "0.8.5"
+uuid = { version = "1.10.0", features = ["serde", "v4"] }
 
 [dev-dependencies]
 pretty_assertions = "1.4.0"

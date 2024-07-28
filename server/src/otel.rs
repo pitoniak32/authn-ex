@@ -9,7 +9,6 @@ use opentelemetry_semantic_conventions::{
     resource::{DEPLOYMENT_ENVIRONMENT, SERVICE_NAME, SERVICE_VERSION},
     SCHEMA_URL,
 };
-use tracing_core::LevelFilter;
 use tracing_opentelemetry::OpenTelemetryLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
@@ -26,10 +25,6 @@ fn resource() -> Resource {
 }
 
 pub fn setup_otel() -> OtelGuard {
-    // TODO: per layer filter
-    // - RUST_LOG for otel.
-    // - clap verbosity flag for logger.
-
     let otel_layer = std::env::var("OTEL_COLLECTOR_URL").map_or_else(
         |_| {
             println!("No collector url found.");

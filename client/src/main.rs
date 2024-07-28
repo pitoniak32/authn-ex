@@ -1,13 +1,23 @@
 use anyhow::Result;
-use passkey::{authenticator::{Authenticator, UserValidationMethod}, types::{Passkey, ctap2::Aaguid, webauthn::{CredentialCreationOptions, AuthenticatorAttestationResponse, CredentialRequestOptions, PublicKeyCredentialRequestOptions, UserVerificationRequirement, AttestationConveyancePreference, AuthenticatorAssertionResponse}, rand::random_vec}, client::{self, Client}};
-use serde_json::Value;
+use passkey::{
+    authenticator::{Authenticator, UserValidationMethod},
+    client::Client,
+    types::{
+        ctap2::Aaguid,
+        rand::random_vec,
+        webauthn::{
+            AttestationConveyancePreference, AuthenticatorAttestationResponse,
+            CredentialCreationOptions, CredentialRequestOptions, PublicKeyCredentialRequestOptions,
+            UserVerificationRequirement,
+        },
+        Passkey,
+    },
+};
 use url::Url;
 
 use std::time::Duration;
 
-use reqwest::{ClientBuilder, header};
-
-use base64::prelude::*;
+use reqwest::{header, ClientBuilder};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -22,21 +32,31 @@ async fn main() -> Result<()> {
     let store: Option<Passkey> = None;
     let my_authenticator = Authenticator::new(my_aaguid, store, user_validation_method);
 
-    let res = client.post("http://localhost:8080/auth/request-credential-create-options").header("cookie", "TOKEN=yersh").send().await?;
+    let res = client
+        .post("http://localhost:8080/auth/request-credential-create-options")
+        .header("cookie", "TOKEN=yersh")
+        .send()
+        .await?;
 
-    let credential_create_options: CredentialCreationOptions = serde_json::from_str(&res.text().await.unwrap()).unwrap();
-
+    let credential_create_options: CredentialCreationOptions =
+        serde_json::from_str(&res.text().await.unwrap()).unwrap();
 
     let mut my_client = Client::new(my_authenticator);
 
     let my_webauthn_credential = my_client
         .register(&origin, credential_create_options, None)
-        .await.unwrap();
+        .await
+        .unwrap();
 
-    let res = client.post("http://localhost:8080/auth/register-created-credentials").header("cookie", "TOKEN=yersh").header(header::CONTENT_TYPE, "application/json").body(serde_json::to_string(&my_webauthn_credential).unwrap()).send().await?;
+    let res = client
+        .post("http://localhost:8080/auth/register-created-credentials")
+        .header("cookie", "TOKEN=yersh")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(serde_json::to_string(&my_webauthn_credential).unwrap())
+        .send()
+        .await?;
 
     println!("{}", res.text().await.unwrap());
-
 
     list_creds(&client).await?;
 
@@ -56,9 +76,16 @@ async fn main() -> Result<()> {
 
     let authenticated_cred = my_client
         .authenticate(&origin, credential_request, None)
-        .await.unwrap();
+        .await
+        .unwrap();
 
-    let res = client.post("http://localhost:8080/auth/validate-authenticated-credentials").header("cookie", "TOKEN=yersh").header(header::CONTENT_TYPE, "application/json").body(serde_json::to_string(&authenticated_cred).unwrap()).send().await?;
+    let res = client
+        .post("http://localhost:8080/auth/validate-authenticated-credentials")
+        .header("cookie", "TOKEN=yersh")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(serde_json::to_string(&authenticated_cred).unwrap())
+        .send()
+        .await?;
 
     dbg!(&res);
 
@@ -66,9 +93,14 @@ async fn main() -> Result<()> {
 }
 
 pub async fn list_creds(client: &reqwest::Client) -> Result<()> {
-    let res = client.get("http://localhost:8080/auth/passkeys").header("cookie", "TOKEN=yersh").send().await?;
+    let res = client
+        .get("http://localhost:8080/auth/passkeys")
+        .header("cookie", "TOKEN=yersh")
+        .send()
+        .await?;
 
-    let keys: Vec<AuthenticatorAttestationResponse> = serde_json::from_str(&res.text().await.unwrap()).unwrap();
+    let keys: Vec<AuthenticatorAttestationResponse> =
+        serde_json::from_str(&res.text().await.unwrap()).unwrap();
 
     dbg!(&keys.len());
 
