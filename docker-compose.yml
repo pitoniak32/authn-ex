@@ -1,4 +1,10 @@
 services:
+  mongo:
+    image: mongo
+    ports:
+      - '27017:27017'
+
+# BEGIN OBSERVABILITY
   jaeger-all-in-one:
     image: jaegertracing/all-in-one:latest
     ports:
@@ -21,3 +27,4 @@ services:
       - "55670:55679" # zpages extension
     depends_on:
       - jaeger-all-in-one
+# END OBSERVABILITY

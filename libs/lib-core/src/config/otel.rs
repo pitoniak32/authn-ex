@@ -24,9 +24,9 @@ fn resource() -> Resource {
     )
 }
 
-pub fn setup_otel() -> OtelGuard {
-    let otel_layer = std::env::var("OTEL_COLLECTOR_URL").map_or_else(
-        |_| {
+pub fn setup_otel(collector_uri: &Option<String>) -> OtelGuard {
+    let otel_layer = collector_uri.clone().map_or_else(
+        || {
             println!("No collector url found.");
             None
         },

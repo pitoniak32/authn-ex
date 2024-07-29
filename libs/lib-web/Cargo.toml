@@ -1,0 +1,36 @@
+[package]
+name = "lib-web"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+lib-core = { workspace = true }
+
+axum = { workspace = true }
+axum-extra = { workspace = true }
+serde = { workspace = true }
+
+bson = { workspace = true }
+
+jsonwebtoken = { workspace = true }
+base64 = { workspace = true }
+chrono = { workspace = true }
+rand = { workspace = true }
+uuid = { workspace = true }
+once_cell = { workspace = true }
+
+serde_json = { workspace = true }
+serde_with = { workspace = true }
+derive_more = { workspace = true }
+
+# BEGIN OBSERVABILITY
+tracing = { workspace = true }
+tracing-opentelemetry = { workspace = true }
+# END OBSERVABILITY
+
+[dev-dependencies]
+async-std = { workspace = true }
+insta = { workspace = true }
+rstest = { workspace = true }
+similar-asserts = { workspace = true }
+anyhow = { workspace = true }

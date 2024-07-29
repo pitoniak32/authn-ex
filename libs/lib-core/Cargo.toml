@@ -1,0 +1,34 @@
+[package]
+name = "lib-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { workspace = true }
+mongodb = { workspace = true }
+bson = { workspace = true }
+chrono = { workspace = true }
+futures = { workspace = true }
+
+# BEGIN OBSERVABILITY
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+tracing-opentelemetry = { workspace = true }
+
+opentelemetry = { workspace = true }
+opentelemetry_sdk = { workspace = true }
+opentelemetry-otlp = { workspace = true }
+opentelemetry-semantic-conventions = { workspace = true }
+# END OBSERVABILITY
+
+# BEGIN ERRORS
+serde_with = { workspace = true }
+derive_more = { workspace = true }
+# END ERRORS
+
+[dev-dependencies]
+async-std = { workspace = true }
+insta = { workspace = true }
+rstest = { workspace = true }
+similar-asserts = { workspace = true }
+anyhow = { workspace = true }

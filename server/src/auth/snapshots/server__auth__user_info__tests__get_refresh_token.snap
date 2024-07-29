@@ -1,0 +1,31 @@
+---
+source: server/src/auth/user_info.rs
+expression: "decode::<AccessClaims>(&input.get_refresh_token(&keys.encoding,\n                12345).unwrap(), &keys.decoding, &validation)"
+---
+Ok(
+    TokenData {
+        header: Header {
+            typ: Some(
+                "JWT",
+            ),
+            alg: HS256,
+            cty: None,
+            jku: None,
+            jwk: None,
+            kid: None,
+            x5u: None,
+            x5c: None,
+            x5t: None,
+            x5t_s256: None,
+        },
+        claims: AccessClaims {
+            user: UserInfo {
+                id: 996d9035-34e7-4c6f-a525-952db8428876,
+                username: "uname",
+                display_name: "User Namerson",
+                refresh_token_version: 0,
+            },
+            exp: 12345,
+        },
+    },
+)

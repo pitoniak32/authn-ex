@@ -1,0 +1,17 @@
+---
+source: server/src/auth/logout.rs
+expression: result
+---
+Ok(
+    Response {
+        status: 200,
+        version: HTTP/1.1,
+        headers: {
+            "set-cookie": "ACCESS_TOKEN=invalidated; Path=/; HttpOnly; SameSite=Strict; Max-Age=999999",
+            "set-cookie": "REFRESH_TOKEN=invalidated; Path=/; HttpOnly; SameSite=Strict; Max-Age=999999",
+        },
+        body: Body(
+            UnsyncBoxBody,
+        ),
+    },
+)
