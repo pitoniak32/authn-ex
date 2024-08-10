@@ -13,10 +13,10 @@ use tracing_opentelemetry::OpenTelemetryLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 // Create a Resource that captures information about the entity for which telemetry is recorded.
-fn resource() -> Resource {
+fn resource(service_name: String) -> Resource {
     Resource::from_schema_url(
         [
-            KeyValue::new(SERVICE_NAME, env!("CARGO_PKG_NAME")),
+            KeyValue::new(SERVICE_NAME, service_name),
             KeyValue::new(SERVICE_VERSION, env!("CARGO_PKG_VERSION")),
             KeyValue::new(DEPLOYMENT_ENVIRONMENT, "develop"),
         ],
@@ -24,21 +24,21 @@ fn resource() -> Resource {
     )
 }
 
-pub fn setup_otel(collector_uri: &Option<String>) -> OtelGuard {
+pub fn setup_otel(collector_uri: &Option<String>, service_name: &str) -> OtelGuard {
     let otel_layer = collector_uri.clone().map_or_else(
         || {
             println!("No collector url found.");
             None
         },
-        |url| Some(OpenTelemetryLayer::new(init_tracer(&url))),
+        |url| Some(OpenTelemetryLayer::new(init_tracer(&url, service_name))),
     );
 
     let filter = if std::env::var("RUST_LOG").is_ok() {
         EnvFilter::builder().from_env_lossy()
     } else {
         format!(
-            "info,{pkg_name}=debug",
-            pkg_name = env!("CARGO_PKG_NAME").replace("-", "_")
+            "info,{pkg_name}=debug,lib_core=debug,lib_web=debug",
+            pkg_name = service_name.replace("-", "_")
         )
         .parse()
         .expect("valid EnvFilter value can be parsed")
@@ -54,7 +54,7 @@ pub fn setup_otel(collector_uri: &Option<String>) -> OtelGuard {
 }
 
 // Construct Tracer for OpenTelemetryLayer
-fn init_tracer(url: &str) -> Tracer {
+fn init_tracer(url: &str, service_name: impl Into<String>) -> Tracer {
     opentelemetry_otlp::new_pipeline()
         .tracing()
         .with_trace_config(
@@ -65,7 +65,7 @@ fn init_tracer(url: &str) -> Tracer {
                 ))))
                 // If export trace to AWS X-Ray, you can use XrayIdGenerator
                 .with_id_generator(RandomIdGenerator::default())
-                .with_resource(resource()),
+                .with_resource(resource(service_name.into())),
         )
         .with_exporter(
             opentelemetry_otlp::new_exporter()

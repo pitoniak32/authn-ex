@@ -338,30 +338,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "axum-extra"
-version = "0.9.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0be6ea09c9b96cb5076af0de2e383bd2bc0c18f827cf1967bdd353e0b910d733"
-dependencies = [
- "axum 0.7.5",
- "axum-core 0.4.3",
- "bytes",
- "cookie",
- "futures-util",
- "headers",
- "http 1.1.0",
- "http-body 1.0.1",
- "http-body-util",
- "mime",
- "pin-project-lite",
- "serde",
- "tower",
- "tower-layer",
- "tower-service",
- "tracing",
-]
-
-[[package]]
 name = "axum-macros"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1286,30 +1262,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e5274423e17b7c9fc20b6e7e208532f9b19825d82dfd615708b70edd83df41f1"
 
 [[package]]
-name = "headers"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "322106e6bd0cba2d5ead589ddb8150a13d7c4217cf80d7c4f682ca994ccc6aa9"
-dependencies = [
- "base64 0.21.7",
- "bytes",
- "headers-core",
- "http 1.1.0",
- "httpdate",
- "mime",
- "sha1",
-]
-
-[[package]]
-name = "headers-core"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "54b4a22553d4242c49fddb9ba998a99962b5cc6f22cb5a3482bec22522403ce4"
-dependencies = [
- "http 1.1.0",
-]
-
-[[package]]
 name = "heck"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1719,20 +1671,25 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-std",
+ "base64 0.22.1",
  "bson",
  "chrono",
  "derive_more 1.0.0",
  "futures",
  "insta",
+ "jsonwebtoken",
  "mongodb",
  "opentelemetry",
  "opentelemetry-otlp",
  "opentelemetry-semantic-conventions",
  "opentelemetry_sdk",
+ "rand",
  "rstest",
  "serde",
+ "serde_json",
  "serde_with 3.9.0",
  "similar-asserts",
+ "tower-cookies",
  "tracing",
  "tracing-opentelemetry",
  "tracing-subscriber",
@@ -1745,7 +1702,6 @@ dependencies = [
  "anyhow",
  "async-std",
  "axum 0.7.5",
- "axum-extra",
  "base64 0.22.1",
  "bson",
  "chrono",
@@ -1760,6 +1716,7 @@ dependencies = [
  "serde_json",
  "serde_with 3.9.0",
  "similar-asserts",
+ "tower-cookies",
  "tracing",
  "tracing-opentelemetry",
  "uuid",
@@ -3060,7 +3017,6 @@ dependencies = [
  "anyhow",
  "async-std",
  "axum 0.7.5",
- "axum-extra",
  "base64 0.22.1",
  "bson",
  "chrono",
@@ -3088,6 +3044,7 @@ dependencies = [
  "similar-asserts",
  "strum 0.26.3",
  "tokio",
+ "tower-cookies",
  "tower-http",
  "tower-sessions",
  "tracing",
@@ -3104,17 +3061,6 @@ name = "sha-1"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f5058ada175748e33390e40e872bd0fe59a19f265d0158daa551c5a88a76009c"
-dependencies = [
- "cfg-if",
- "cpufeatures",
- "digest",
-]
-
-[[package]]
-name = "sha1"
-version = "0.10.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3bf829a2d51ab4a5ddf1352d8470c140cadc8301b2ae1789db023f01cedd6ba"
 dependencies = [
  "cfg-if",
  "cpufeatures",

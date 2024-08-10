@@ -1,38 +1,13 @@
 use chrono::{DateTime, Utc};
 use futures::StreamExt;
+use mongodb::bson::doc;
 use mongodb::bson::oid::ObjectId;
-use mongodb::{bson::doc, Collection};
 use serde::{Deserialize, Serialize};
-
-use crate::config::mongo::{get_sessions_collection, UserSessionModel};
-use crate::config::{
-    env_key::config,
-    mongo::{get_users_collection, init_mongo},
-};
 
 use crate::ctx::Ctx;
 
+use super::model_manager::ModelManager;
 use super::{Error, Result};
-
-#[derive(Debug, Clone)]
-pub struct ModelManager {
-    pub users: Collection<UserModel>,
-    pub sessions: Collection<UserSessionModel>,
-}
-
-impl ModelManager {
-    pub async fn new() -> Result<Self> {
-        let client = init_mongo(&config().MONGO_DB_URI).await;
-
-        let users = get_users_collection(&client);
-        let sessions = get_sessions_collection(&client);
-
-        println!("created");
-
-        Ok(ModelManager { users, sessions })
-    }
-}
-
 pub struct UserBmc;
 
 impl UserBmc {
@@ -69,10 +44,24 @@ impl UserBmc {
         Ok(id)
     }
 
-    pub async fn get_one(_ctx: &Ctx, mm: &ModelManager, username: &str) -> Result<UserModel> {
+    pub async fn get_one_username(
+        _ctx: &Ctx,
+        mm: &ModelManager,
+        username: &str,
+    ) -> Result<UserModel> {
         let user = mm
             .users
             .find_one(doc! { "username": username })
+            .await?
+            .ok_or(Error::EntityNotFound)?;
+
+        Ok(user)
+    }
+
+    pub async fn get_one_id(_ctx: &Ctx, mm: &ModelManager, id: &ObjectId) -> Result<UserModel> {
+        let user = mm
+            .users
+            .find_one(doc! { "_id": id })
             .await?
             .ok_or(Error::EntityNotFound)?;
 
@@ -105,6 +94,7 @@ pub struct UserModel {
     pub username: String,
     pub password: String,
     pub email: String,
+    pub session_version: u32,
     #[serde(with = "bson::serde_helpers::chrono_datetime_as_bson_datetime")]
     pub created_at: DateTime<Utc>,
     #[serde(with = "bson::serde_helpers::chrono_datetime_as_bson_datetime")]
@@ -118,6 +108,7 @@ impl UserModel {
             username: username.clone(),
             password: password.clone(),
             email: email.clone(),
+            session_version: 0,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
         }
@@ -125,9 +116,9 @@ impl UserModel {
 }
 
 pub struct UserForCreate {
-    username: String,
-    password: String,
-    email: String,
+    pub username: String,
+    pub password: String,
+    pub email: String,
 }
 
 #[cfg(test)]
@@ -143,11 +134,23 @@ mod tests {
     };
 
     #[rstest]
-    #[case("bmc_user_create username_ok", "bmc_user_create password_ok", "bmc_user_create email_ok")]
-    async fn test_bmc_user_create_ok(#[case] username: &str, #[case] password: &str, #[case] email: &str) -> Result<()> {
+    #[case(
+        "bmc_user_create username_ok",
+        "bmc_user_create password_ok",
+        "bmc_user_create email_ok"
+    )]
+    async fn test_bmc_user_create_ok(
+        #[case] username: &str,
+        #[case] password: &str,
+        #[case] email: &str,
+    ) -> Result<()> {
         // Arrange
 
-        let ctx = Ctx::new(&UserInfo::new(ObjectId::new(), "root"))?;
+        let ctx = Ctx::new(&UserInfo::new(
+            ObjectId::new(),
+            "root",
+            Some("test_agent".to_string()),
+        ))?;
         let mm = ModelManager::new().await?;
 
         // Act
@@ -160,10 +163,13 @@ mod tests {
                 email: email.to_string(),
             },
         )
-        .await.unwrap();
+        .await
+        .unwrap();
 
         // Assert
-        let user = UserBmc::get_one(&ctx, &mm, username).await.unwrap();
+        let user = UserBmc::get_one_username(&ctx, &mm, username)
+            .await
+            .unwrap();
         assert_eq!(id, user._id);
         assert_eq!(user.username, username);
         assert_eq!(user.password, password);

@@ -5,10 +5,16 @@ edition = "2021"
 
 [dependencies]
 serde = { workspace = true }
+serde_json = { workspace = true }
 mongodb = { workspace = true }
 bson = { workspace = true }
 chrono = { workspace = true }
 futures = { workspace = true }
+tower-cookies = { workspace = true }
+
+base64 = { workspace = true }
+jsonwebtoken = { workspace = true }
+rand = { workspace = true }
 
 # BEGIN OBSERVABILITY
 tracing = { workspace = true }

@@ -28,8 +28,9 @@ opentelemetry-semantic-conventions = "0.13.0"
 # BEGIN WEBSERVER
 tokio = { version = "1.39.2", features = ["full"] }
 axum = { version = "0.7.5", features = ["macros"] }
-axum-extra = { version = "0.9.3", features = ["typed-header", "cookie"] }
 tower-http = { version = "0.5.2", features = ["trace"] }
+tower-cookies = { version = "0.10.0" }
+ring = "0.17.7"
 
 passkey = "0.2.0"
 base64 = "0.22.1"

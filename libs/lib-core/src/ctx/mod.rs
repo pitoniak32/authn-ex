@@ -18,7 +18,7 @@ pub struct Ctx {
 impl Ctx {
     pub fn root_ctx() -> Self {
         Ctx {
-            user: UserInfo::new(ObjectId::new(), "root"),
+            user: UserInfo::new(ObjectId::new(), "root", None),
             is_root: true,
         }
     }
@@ -47,13 +47,19 @@ impl Ctx {
 pub struct UserInfo {
     pub id: ObjectId,
     pub username: String,
+    pub user_agent: Option<String>,
 }
 
 impl UserInfo {
-    pub fn new(id: impl Into<ObjectId>, username: impl Into<String>) -> Self {
+    pub fn new(
+        id: impl Into<ObjectId>,
+        username: impl Into<String>,
+        user_agent: Option<String>,
+    ) -> Self {
         UserInfo {
             id: id.into(),
             username: username.into(),
+            user_agent,
         }
     }
 }

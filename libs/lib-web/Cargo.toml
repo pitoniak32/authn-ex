@@ -7,8 +7,8 @@ edition = "2021"
 lib-core = { workspace = true }
 
 axum = { workspace = true }
-axum-extra = { workspace = true }
 serde = { workspace = true }
+tower-cookies = { workspace = true }
 
 bson = { workspace = true }
 

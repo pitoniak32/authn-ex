@@ -8,53 +8,44 @@ use axum::{
     Json, Router,
 };
 
-use bson::oid::ObjectId;
+use bson::{doc, oid::ObjectId};
+use futures::StreamExt;
 use lib_core::{
     config::{env_key::config, otel},
-    ctx::UserInfo,
-    model::ModelManager,
+    ctx::{Ctx, UserInfo},
+    model::{model_manager::ModelManager, UserBmc, UserForCreate},
 };
-use lib_web::middleware::{ctx_require, mw_ctx_resolver};
+use lib_web::middleware::{ctx_require, mw_ctx_resolver, CtxW};
+use tower_cookies::CookieManagerLayer;
 use tower_http::trace::{self, TraceLayer};
 use tracing::Level;
-use uuid::Uuid;
 
 pub mod auth;
 pub mod util_routes;
 
 #[tokio::main]
 async fn main() {
-    let _guard = otel::setup_otel(&config().OTEL_COLLECTOR_URI);
+    let _guard = otel::setup_otel(&config().OTEL_COLLECTOR_URI, env!("CARGO_PKG_NAME"));
 
-    let seed_uid = Uuid::new_v4();
+    // let seed_uid = Uuid::new_v4();
 
     let mm = ModelManager::new().await.unwrap();
 
     let app = Router::new()
         .route("/", get(root))
+        .route("/user/create", post(create_test_user))
         .nest(
             "/auth",
             Router::new()
                 .route("/login", post(login))
-                .route("/logout", post(logout)), // .route("/passkeys", get(get_passkeys))
-                                                 // .route(
-                                                 //     "/request-credential-create-options",
-                                                 //     post(request_credential_creation_options),
-                                                 // )
-                                                 // .route(
-                                                 //     "/register-created-credentials",
-                                                 //     post(register_created_credentials),
-                                                 // )
-                                                 // .route(
-                                                 //     "/validate-authenticated-credentials",
-                                                 //     post(validate_authenticated_credential),
-                                                 // )
+                .route("/logout", post(logout)),
         )
         .nest(
             "/api",
             Router::new()
                 .route("/user/info", post(user_info))
                 .route("/protected", get(protected))
+                .route("/sessions", get(list_sessions))
                 .route_layer(middleware::from_fn(ctx_require)),
         )
         .layer(middleware::from_fn_with_state(mm.clone(), mw_ctx_resolver))
@@ -68,6 +59,7 @@ async fn main() {
                 .on_response(trace::DefaultOnResponse::new().level(Level::INFO)),
         )
         .nest("/health", util_routes::health_router())
+        .layer(CookieManagerLayer::new())
         .fallback(util_routes::not_found);
 
     let listener = tokio::net::TcpListener::bind((config().SERVICE_IP, config().SERVICE_PORT))
@@ -96,6 +88,7 @@ pub async fn user_info(req: Request) -> Result<Response, StatusCode> {
         Json(vec![UserInfo {
             id: ObjectId::new(),
             username: "test".to_string(),
+            user_agent: None,
         }]),
     )
         .into_response())
@@ -111,6 +104,43 @@ pub async fn root() -> Result<Response, StatusCode> {
 }
 
 #[tracing::instrument(skip_all)]
-pub async fn protected(_mm: State<ModelManager>) -> Result<Response, StatusCode> {
+pub async fn create_test_user(mm: State<ModelManager>) -> Result<Response, StatusCode> {
+    let ctx = Ctx::root_ctx();
+    let result = UserBmc::create(
+        &ctx,
+        &mm,
+        UserForCreate {
+            username: "test".to_string(),
+            password: "test".to_string(),
+            email: "test".to_string(),
+        },
+    )
+    .await;
+
+    dbg!(&result);
+
     Ok((StatusCode::OK, "").into_response())
+}
+
+#[tracing::instrument(skip_all)]
+pub async fn list_sessions(ctx: CtxW, mm: State<ModelManager>) -> Result<Response, StatusCode> {
+    let ctx = ctx.0;
+
+    let sessions: Vec<_> = mm
+        .sessions
+        .find(doc! {"user_id": ctx.user().id })
+        .await
+        .unwrap()
+        .collect()
+        .await;
+
+    dbg!(&sessions);
+
+    Ok((StatusCode::OK, "").into_response())
+}
+
+#[tracing::instrument(skip_all)]
+pub async fn protected(ctx: CtxW, _mm: State<ModelManager>) -> Result<Response, StatusCode> {
+    let ctx = ctx.0;
+    Ok((StatusCode::OK, Json(ctx.user())).into_response())
 }

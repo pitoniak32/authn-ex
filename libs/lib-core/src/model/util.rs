@@ -1,4 +1,4 @@
-use crate::{ctx::Ctx, model::user::ModelManager};
+use crate::{ctx::Ctx, model::model_manager::ModelManager};
 
 pub async fn init_dev_db() -> Result<(), Box<dyn std::error::Error>> {
     // -- Init model layer.

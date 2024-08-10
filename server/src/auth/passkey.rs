@@ -14,6 +14,21 @@
 //     },
 // };
 
+// .route("/passkeys", get(get_passkeys))
+// .route("/passkeys", get(get_passkeys))
+// .route(
+//     "/request-credential-create-options",
+//     post(request_credential_creation_options),
+// )
+// .route(
+//     "/register-created-credentials",
+//     post(register_created_credentials),
+// )
+// .route(
+//     "/validate-authenticated-credentials",
+//     post(validate_authenticated_credential),
+// )
+
 // use coset::iana;
 // use url::Url;
 

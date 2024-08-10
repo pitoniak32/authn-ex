@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use axum::{
     async_trait,
     body::Body,
@@ -8,146 +6,29 @@ use axum::{
     middleware::Next,
     response::Response,
 };
-use axum_extra::extract::{cookie::Cookie, CookieJar};
-use base64::prelude::*;
-use bson::oid::ObjectId;
-use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
+
+use jsonwebtoken::{decode, Validation};
 use lib_core::{
-    ctx::{Ctx, UserInfo},
-    model::{user, ModelManager},
+    ctx::Ctx,
+    model::model_manager::ModelManager,
+    token::{
+        claims::{AccessClaims, RefreshClaims},
+        get_access_token, get_token_cookie,
+        keys::{ACCESS_TOKEN_EXPIRATION, KEYS},
+        COOKIE_ACCESS_TOKEN_KEY, COOKIE_REFRESH_TOKEN_KEY,
+    },
 };
-use rand::distributions::{Alphanumeric, DistString};
-use serde::{Deserialize, Serialize};
-use uuid::Uuid;
+use serde::Serialize;
+use tower_cookies::{cookie::CookieBuilder, Cookie, Cookies};
 
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
-use once_cell::sync::Lazy;
-
 use crate::{Error, Result};
 
-pub const ACCESS_TOKEN_KEY: &str = "ACCESS_TOKEN";
-pub const REFRESH_TOKEN_KEY: &str = "REFRESH_TOKEN";
-
-pub static KEYS: Lazy<Keys> = Lazy::new(|| {
-    let secret = Alphanumeric.sample_string(&mut rand::thread_rng(), 60);
-    Keys::new(secret.as_bytes())
-});
-
-pub static ACCESS_TOKEN_EXPIRATION: Lazy<chrono::Duration> =
-    Lazy::new(|| chrono::Duration::seconds(5));
-
-pub static REFRESH_TOKEN_EXPIRATION: Lazy<chrono::Duration> =
-    Lazy::new(|| chrono::Duration::minutes(5));
-
-pub struct Keys {
-    pub encoding: EncodingKey,
-    pub decoding: DecodingKey,
-}
-
-impl Keys {
-    pub fn new(secret: &[u8]) -> Self {
-        Self {
-            encoding: EncodingKey::from_secret(secret),
-            decoding: DecodingKey::from_secret(secret),
-        }
-    }
-}
-
-pub fn get_access_token(
-    user: &UserInfo,
-    encoding_key: &EncodingKey,
-    duration: chrono::Duration,
-) -> Result<String> {
-    let access_token = encode(
-        &Header::default(),
-        &AccessClaims {
-            user: user.clone(),
-            exp: (chrono::Utc::now().naive_utc() + duration)
-                .and_utc()
-                .timestamp() as usize,
-        },
-        encoding_key,
-    )
-    .map_err(|_| Error::CtxExt(CtxExtError::CannotEncodeToken))?;
-
-    Ok(access_token)
-}
-
-pub fn get_refresh_token(
-    user: &UserInfo,
-    encoding_key: &EncodingKey,
-    duration: chrono::Duration,
-) -> Result<String> {
-    let refresh_token = encode(
-        &Header::default(),
-        &RefreshClaims {
-            user: user.clone(),
-            version: 0,
-            exp: (chrono::Utc::now().naive_utc() + duration)
-                .and_utc()
-                .timestamp() as usize,
-        },
-        encoding_key,
-    )
-    .map_err(|_| Error::CtxExt(CtxExtError::CannotEncodeToken))?;
-
-    Ok(refresh_token)
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AccessClaims {
-    pub user: UserInfo,
-    pub exp: usize,
-}
-
-impl FromStr for AccessClaims {
-    type Err = Error;
-
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        let parts = s.split(".").collect::<Vec<&str>>();
-        let claims = parts
-            .get(1)
-            .ok_or(Error::CtxExt(CtxExtError::InvalidToken))?;
-        let decoded = String::from_utf8(
-            BASE64_STANDARD_NO_PAD
-                .decode(claims)
-                .map_err(|_| Error::CtxExt(CtxExtError::InvalidToken))?,
-        )
-        .map_err(|_| Error::CtxExt(CtxExtError::InvalidToken))?;
-        Ok(serde_json::from_str::<AccessClaims>(&decoded)
-            .map_err(|_| Error::CtxExt(CtxExtError::InvalidToken))?)
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RefreshClaims {
-    pub user: UserInfo,
-    pub version: u16,
-    pub exp: usize,
-}
-
-impl FromStr for RefreshClaims {
-    type Err = Error;
-
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        let parts = s.split(".").collect::<Vec<&str>>();
-        let claims = parts
-            .get(1)
-            .ok_or(Error::CtxExt(CtxExtError::InvalidToken))?;
-        let decoded = String::from_utf8(
-            BASE64_STANDARD_NO_PAD
-                .decode(claims)
-                .map_err(|_| Error::CtxExt(CtxExtError::InvalidToken))?,
-        )
-        .map_err(|_| Error::CtxExt(CtxExtError::InvalidToken))?;
-        Ok(serde_json::from_str::<RefreshClaims>(&decoded)
-            .map_err(|_| Error::CtxExt(CtxExtError::InvalidToken))?)
-    }
-}
-
+#[tracing::instrument(level = "debug", skip_all, err)]
 pub async fn ctx_require(ctx: Result<CtxW>, req: Request<Body>, next: Next) -> Result<Response> {
-    dbg!(&ctx);
+    tracing::debug!("checking for Ctx");
+
     ctx?;
 
     Ok(next.run(req).await)
@@ -158,18 +39,28 @@ pub async fn ctx_require(ctx: Result<CtxW>, req: Request<Body>, next: Next) -> R
 //            This way it won't prevent downstream middleware to be executed, and will still capture the error
 //            for the appropriate middleware (.e.g., mw_ctx_require which forces successful auth) or handler
 //            to get the appropriate information.
+
+#[tracing::instrument(skip_all)]
 pub async fn mw_ctx_resolver(
     State(mm): State<ModelManager>,
-    cookies: CookieJar,
+    cookies: Cookies,
     mut req: Request<Body>,
     next: Next,
 ) -> Response {
-    tracing::debug!("{:<12} - mw_ctx_resolve", "MIDDLEWARE");
-
     let ctx_ext_result = ctx_resolve(mm, &cookies).await;
 
     if ctx_ext_result.is_err() && !matches!(ctx_ext_result, Err(CtxExtError::TokenNotInCookie)) {
-        cookies.remove(ACCESS_TOKEN_KEY);
+        tracing::debug!("removing access_token, and refresh_token from cookies");
+        cookies.remove(
+            CookieBuilder::from(Cookie::from(COOKIE_ACCESS_TOKEN_KEY))
+                .path("/")
+                .build(),
+        );
+        cookies.remove(
+            CookieBuilder::from(Cookie::from(COOKIE_REFRESH_TOKEN_KEY))
+                .path("/")
+                .build(),
+        );
     }
 
     // Store the ctx_ext_result in the request extension
@@ -179,76 +70,78 @@ pub async fn mw_ctx_resolver(
     next.run(req).await
 }
 
-async fn ctx_resolve(mm: ModelManager, cookies: &CookieJar) -> CtxExtResult {
-    let res = match cookies
-        .get(ACCESS_TOKEN_KEY)
+#[tracing::instrument(skip_all)]
+async fn ctx_resolve(mm: ModelManager, cookies: &Cookies) -> CtxExtResult {
+    // Check access token
+    let access_token = cookies
+        .get(COOKIE_ACCESS_TOKEN_KEY)
         .map(|cookie| cookie.value().to_owned())
-    {
-        Some(token) => {
-            // Decode the user data
-            let mut validation = Validation::default();
-            validation.leeway = 5;
-            let decode_result = decode::<AccessClaims>(&token, &KEYS.decoding, &validation);
+        .ok_or(CtxExtError::TokenNotInCookie)?;
 
-            dbg!(&decode_result);
+    // If access_token is good return
+    tracing::debug!("cookie contained access_token");
 
-            match decode_result {
-                Ok(token_data) => {
-                    tracing::Span::current()
-                        .set_attribute("claims.username", token_data.clone().claims.user.username);
-                    Ok(token_data.claims)
-                }
-                Err(e) if e.kind() == &jsonwebtoken::errors::ErrorKind::ExpiredSignature => {
-                    let rf_tok = cookies
-                        .get(REFRESH_TOKEN_KEY)
-                        .map(|cookie| cookie.value().to_owned())
-                        .ok_or(CtxExtError::InvalidToken)?;
+    // Decode the user data
+    let mut validation = Validation::default();
+    validation.leeway = 5;
+    let decode_result = decode::<AccessClaims>(&access_token, &KEYS.decoding, &validation);
 
-                    let token_data = decode::<RefreshClaims>(&rf_tok, &KEYS.decoding, &validation)
-                        .map_err(|_| CtxExtError::InvalidToken)?;
-
-                    dbg!(&token_data);
-
-                    tracing::Span::current()
-                        .set_attribute("claims.username", token_data.clone().claims.user.username);
-
-                    let new_access_token = get_access_token(
-                        &token_data.claims.user,
-                        &KEYS.encoding,
-                        *ACCESS_TOKEN_EXPIRATION,
-                    )
-                    .map_err(|_| CtxExtError::InvalidToken)?;
-
-                // TODO: add the new access_token into the cookies.....
-
-                    let _ = cookies
-                        .clone()
-                        .add(Cookie::new(ACCESS_TOKEN_KEY, new_access_token.clone()));
-
-                    tracing::warn!("created new access_token, using refresh token old one expired");
-
-                    Ok(
-                        decode::<AccessClaims>(&new_access_token, &KEYS.decoding, &validation)
-                            .map_err(|_| CtxExtError::CannotDecodeToken)?
-                            .claims,
-                    )
-                }
-                Err(e) => {
-                    tracing::error!(error.kind = ?e.kind(), "encountered error decoding / validating access jwt");
-
-                    Err(CtxExtError::InvalidToken)
-                }
-            }
+    match decode_result {
+        Ok(token_data) => {
+            tracing::debug!("access_token was valid");
+            tracing::Span::current()
+                .set_attribute("claims.username", token_data.clone().claims.user.username);
+            Ok(Ctx::new(&token_data.claims.user)
+                .map(CtxW)
+                .map_err(|ex| CtxExtError::CtxCreateFail(ex.to_string()))?)
         }
-        None => Err(CtxExtError::InvalidToken),
-    };
+        Err(e) if e.kind() == &jsonwebtoken::errors::ErrorKind::ExpiredSignature => {
+            tracing::debug!("access_token was expired");
 
-    // -- Create CtxExtResult
-    match res {
-        Ok(claim) => Ctx::new(&claim.user)
-            .map(CtxW)
-            .map_err(|ex| CtxExtError::CtxCreateFail(ex.to_string())),
-        Err(e) => Err(e),
+            mm.sessions;
+
+            let rf_tok = cookies
+                .get(COOKIE_REFRESH_TOKEN_KEY)
+                .map(|cookie| cookie.value().to_owned())
+                .ok_or(CtxExtError::TokenNotInCookie)?;
+
+            let refresh_token_data =
+                match decode::<RefreshClaims>(&rf_tok, &KEYS.decoding, &validation) {
+                    Ok(refresh_token_data) => Ok(refresh_token_data),
+                    Err(e) if e.kind() == &jsonwebtoken::errors::ErrorKind::ExpiredSignature => {
+                        tracing::debug!("refresh_token was expired, user must login");
+                        Err(CtxExtError::ExpiredRefreshToken)
+                    }
+                    Err(e) => {
+                        tracing::debug!(error.kind = ?e.kind(), "refresh_token was invalid");
+                        Err(CtxExtError::InvalidRefreshToken)
+                    }
+                }?;
+
+            tracing::debug!("using refresh_token to generate new access_token");
+            // tracing::Span::current()
+            //     .set_attribute("claims.username", token_data.clone().claims.user.username);
+
+            let new_access_token = get_access_token(
+                &refresh_token_data.claims.user,
+                &KEYS.encoding,
+                *ACCESS_TOKEN_EXPIRATION,
+            )
+            .map_err(|_| CtxExtError::InvalidAccessToken)?;
+
+            tracing::debug!("adding new access_token cookie");
+
+            cookies.add(get_token_cookie(new_access_token, COOKIE_ACCESS_TOKEN_KEY));
+
+            Ok(Ctx::new(&refresh_token_data.claims.user)
+                .map(CtxW)
+                .map_err(|ex| CtxExtError::CtxCreateFail(ex.to_string()))?)
+        }
+        Err(e) => {
+            tracing::debug!(error.kind = ?e.kind(), "access_token was invalid");
+
+            Err(CtxExtError::InvalidAccessToken)
+        }
     }
 }
 
@@ -261,7 +154,6 @@ impl<S: Send + Sync> FromRequestParts<S> for CtxW {
     type Rejection = Error;
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self> {
-        tracing::debug!("{:<12} - Ctx", "EXTRACTOR");
         parts
             .extensions
             .get::<CtxExtResult>()
@@ -278,7 +170,13 @@ type CtxExtResult = core::result::Result<CtxW, CtxExtError>;
 #[derive(Clone, Serialize, Debug)]
 pub enum CtxExtError {
     TokenNotInCookie,
-    InvalidToken,
+
+    InvalidAccessToken,
+    InvalidRefreshToken,
+
+    ExpiredAccessToken,
+    ExpiredRefreshToken,
+
     CannotEncodeToken,
     CannotDecodeToken,
 

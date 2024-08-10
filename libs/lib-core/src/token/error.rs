@@ -7,22 +7,19 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[serde_as]
 #[derive(Debug, Serialize, From)]
 pub enum Error {
-    UserAlreadyExists {
-        username: String,
-    },
-    NonRootUserCantCreate,
+    InvalidAccessToken,
+    InvalidRefreshToken,
 
-    SessionAlreadyExists,
+    CouldNotDeserializeAccessClaim,
+    CouldNotDeserializeRefreshClaim,
 
-    EntityNotFound,
-
-    InvalidObjectIdInserted,
+    #[from]
+    Base64(#[serde_as(as = "DisplayFromStr")] base64::DecodeError),
+    #[from]
+    FromUtf8(#[serde_as(as = "DisplayFromStr")] std::string::FromUtf8Error),
 
     #[from]
     MongoDb(#[serde_as(as = "DisplayFromStr")] mongodb::error::Error),
-
-    #[from]
-    Bson(#[serde_as(as = "DisplayFromStr")] bson::ser::Error),
 }
 
 impl std::fmt::Display for Error {

@@ -100,7 +100,7 @@ use std::sync::OnceLock;
 pub fn config() -> &'static Config {
     static INSTANCE: OnceLock<Config> = OnceLock::new();
 
-    INSTANCE.get_or_init(|| Config::from_env())
+    INSTANCE.get_or_init(Config::from_env)
 }
 
 #[allow(non_snake_case)]

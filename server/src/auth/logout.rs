@@ -7,20 +7,22 @@ use axum::{
     response::{IntoResponse, Response},
 };
 
-use axum_extra::extract::CookieJar;
 use futures::StreamExt;
-use lib_core::{ctx::UserInfo, model::ModelManager};
-use lib_web::middleware::{AccessClaims, RefreshClaims, ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY};
-use mongodb::{bson::doc, Client};
+use lib_core::{
+    model::model_manager::ModelManager,
+    token::{claims::RefreshClaims, COOKIE_ACCESS_TOKEN_KEY, COOKIE_REFRESH_TOKEN_KEY},
+};
+use mongodb::bson::doc;
+use tower_cookies::Cookies;
 
 use super::error::Error;
 
 #[tracing::instrument(skip_all)]
-pub async fn logout(State(mm): State<ModelManager>, jar: CookieJar) -> Result<Response, Error> {
-    tracing::info!("logging user out");
+pub async fn logout(State(mm): State<ModelManager>, jar: Cookies) -> Result<Response, Error> {
+    tracing::debug!("logging user out");
 
     let refresh_token = jar
-        .get(REFRESH_TOKEN_KEY)
+        .get(COOKIE_REFRESH_TOKEN_KEY)
         .map(|cookie| cookie.value().to_owned());
 
     if let Some(tok) = refresh_token {
@@ -35,19 +37,7 @@ pub async fn logout(State(mm): State<ModelManager>, jar: CookieJar) -> Result<Re
             .collect()
             .await;
 
-        for session in sessions {
-            match session {
-                Ok(session) => {
-                    if session.refresh_token == tok {
-                        mm.sessions
-                            .delete_one(doc! { "_id": session._id})
-                            .await
-                            .map_err(|_| Error::WrongCredentials)?;
-                    }
-                }
-                Err(_) => todo!(),
-            }
-        }
+        for session in sessions {}
     } else {
         return Ok((
             StatusCode::BAD_REQUEST,
@@ -66,14 +56,14 @@ fn build_logout_response() -> Result<Response, Error> {
             "Set-Cookie",
             format!(
                 "{}={}; Path=/; HttpOnly; SameSite=Strict; Max-Age=999999{}",
-                ACCESS_TOKEN_KEY, "invalidated", ""
+                COOKIE_ACCESS_TOKEN_KEY, "invalidated", ""
             ),
         )
         .header(
             "Set-Cookie",
             format!(
                 "{}={}; Path=/; HttpOnly; SameSite=Strict; Max-Age=999999{}",
-                REFRESH_TOKEN_KEY, "invalidated", ""
+                COOKIE_REFRESH_TOKEN_KEY, "invalidated", ""
             ),
         )
         .body(Body::empty())
