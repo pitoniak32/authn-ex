@@ -1,4 +1,4 @@
-use auth::{login, logout};
+use auth::{create_account, login, logout};
 use axum::{
     extract::{Request, State},
     http::StatusCode,
@@ -11,11 +11,11 @@ use axum::{
 use bson::{doc, oid::ObjectId};
 use futures::StreamExt;
 use lib_core::{
-    config::{env_key::config, otel},
+    config::{get_config, setup_otel},
     ctx::{Ctx, UserInfo},
-    model::{model_manager::ModelManager, UserBmc, UserForCreate},
+    model::{ModelManager, UserBmc, UserForCreate},
 };
-use lib_web::middleware::{ctx_require, mw_ctx_resolver, CtxW};
+use lib_web::{ctx_require, mw_ctx_resolver, CtxW};
 use tower_cookies::CookieManagerLayer;
 use tower_http::trace::{self, TraceLayer};
 use tracing::Level;
@@ -25,7 +25,7 @@ pub mod util_routes;
 
 #[tokio::main]
 async fn main() {
-    let _guard = otel::setup_otel(&config().OTEL_COLLECTOR_URI, env!("CARGO_PKG_NAME"));
+    let _guard = setup_otel(&get_config().OTEL_COLLECTOR_URI, env!("CARGO_PKG_NAME"));
 
     // let seed_uid = Uuid::new_v4();
 
@@ -38,7 +38,8 @@ async fn main() {
             "/auth",
             Router::new()
                 .route("/login", post(login))
-                .route("/logout", post(logout)),
+                .route("/logout", post(logout))
+                .route("/create-account", post(create_account)),
         )
         .nest(
             "/api",
@@ -62,9 +63,10 @@ async fn main() {
         .layer(CookieManagerLayer::new())
         .fallback(util_routes::not_found);
 
-    let listener = tokio::net::TcpListener::bind((config().SERVICE_IP, config().SERVICE_PORT))
-        .await
-        .unwrap();
+    let listener =
+        tokio::net::TcpListener::bind((get_config().SERVICE_IP, get_config().SERVICE_PORT))
+            .await
+            .unwrap();
 
     tracing::info!(
         "Listening on: {}",
@@ -127,7 +129,7 @@ pub async fn list_sessions(ctx: CtxW, mm: State<ModelManager>) -> Result<Respons
     let ctx = ctx.0;
 
     let sessions: Vec<_> = mm
-        .sessions
+        .user_sessions
         .find(doc! {"user_id": ctx.user().id })
         .await
         .unwrap()

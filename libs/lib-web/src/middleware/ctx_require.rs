@@ -10,12 +10,10 @@ use axum::{
 use jsonwebtoken::{decode, Validation};
 use lib_core::{
     ctx::Ctx,
-    model::model_manager::ModelManager,
+    model::ModelManager,
     token::{
-        claims::{AccessClaims, RefreshClaims},
-        get_access_token, get_token_cookie,
-        keys::{ACCESS_TOKEN_EXPIRATION, KEYS},
-        COOKIE_ACCESS_TOKEN_KEY, COOKIE_REFRESH_TOKEN_KEY,
+        get_token_cookie, AccessClaims, RefreshClaims, COOKIE_ACCESS_TOKEN_KEY,
+        COOKIE_REFRESH_TOKEN_KEY, KEYS,
     },
 };
 use serde::Serialize;
@@ -98,7 +96,7 @@ async fn ctx_resolve(mm: ModelManager, cookies: &Cookies) -> CtxExtResult {
         Err(e) if e.kind() == &jsonwebtoken::errors::ErrorKind::ExpiredSignature => {
             tracing::debug!("access_token was expired");
 
-            mm.sessions;
+            mm.user_sessions;
 
             let rf_tok = cookies
                 .get(COOKIE_REFRESH_TOKEN_KEY)
@@ -122,12 +120,9 @@ async fn ctx_resolve(mm: ModelManager, cookies: &Cookies) -> CtxExtResult {
             // tracing::Span::current()
             //     .set_attribute("claims.username", token_data.clone().claims.user.username);
 
-            let new_access_token = get_access_token(
-                &refresh_token_data.claims.user,
-                &KEYS.encoding,
-                *ACCESS_TOKEN_EXPIRATION,
-            )
-            .map_err(|_| CtxExtError::InvalidAccessToken)?;
+            let new_access_token = AccessClaims::new(refresh_token_data.claims.user.clone())
+                .tokenize()
+                .map_err(|_| CtxExtError::InvalidAccessToken)?;
 
             tracing::debug!("adding new access_token cookie");
 

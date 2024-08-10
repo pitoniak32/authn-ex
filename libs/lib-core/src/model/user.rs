@@ -1,89 +1,72 @@
+use bson::Document;
 use chrono::{DateTime, Utc};
-use futures::StreamExt;
 use mongodb::bson::doc;
 use mongodb::bson::oid::ObjectId;
 use serde::{Deserialize, Serialize};
 
+use crate::config::MONGO_COLL_NAME_USERS;
 use crate::ctx::Ctx;
 
+use super::bmc_base::{create, delete_many, delete_one, find_all, find_many, find_one, Bmc};
 use super::model_manager::ModelManager;
 use super::{Error, Result};
+
 pub struct UserBmc;
+
+impl Bmc for UserBmc {
+    const COLLECTION_NAME: &'static str = MONGO_COLL_NAME_USERS;
+}
 
 impl UserBmc {
     pub async fn create(ctx: &Ctx, mm: &ModelManager, user_c: UserForCreate) -> Result<ObjectId> {
-        let UserForCreate {
-            username,
-            password,
-            email,
-        } = user_c;
-
-        if !ctx.is_root() {
-            return Err(Error::NonRootUserCantCreate);
-        }
-
-        if mm
-            .users
-            .find_one(doc! { "username": username.clone() })
+        if find_one::<Self, _>(ctx, &mm.users, doc! { "username": &user_c.username })
             .await
-            .map_err(Error::MongoDb)?
-            .is_some()
+            .is_ok()
         {
-            return Err(Error::UserAlreadyExists { username });
+            return Err(Error::EntityAlreadyExists {
+                collection_name: Self::COLLECTION_NAME,
+            });
         }
 
-        let user = UserModel::new(username, password, email);
-
-        let result = mm.users.insert_one(user.clone()).await?;
-
-        let id = result
-            .inserted_id
-            .as_object_id()
-            .ok_or(Error::InvalidObjectIdInserted)?;
+        let id = create::<Self, _>(ctx, &mm.users, UserModel::from(user_c)).await?;
 
         Ok(id)
     }
 
-    pub async fn get_one_username(
-        _ctx: &Ctx,
+    pub async fn find_one_username(
+        ctx: &Ctx,
         mm: &ModelManager,
         username: &str,
     ) -> Result<UserModel> {
-        let user = mm
-            .users
-            .find_one(doc! { "username": username })
-            .await?
-            .ok_or(Error::EntityNotFound)?;
-
-        Ok(user)
+        find_one::<Self, _>(ctx, &mm.users, doc! {"username": username}).await
     }
 
-    pub async fn get_one_id(_ctx: &Ctx, mm: &ModelManager, id: &ObjectId) -> Result<UserModel> {
-        let user = mm
-            .users
-            .find_one(doc! { "_id": id })
-            .await?
-            .ok_or(Error::EntityNotFound)?;
-
-        Ok(user)
+    pub async fn find_one_id(ctx: &Ctx, mm: &ModelManager, id: &ObjectId) -> Result<UserModel> {
+        find_one::<Self, _>(ctx, &mm.users, doc! { "_id": id }).await
     }
 
-    pub async fn get_all(
-        _ctx: &Ctx,
+    pub async fn find_many(
+        ctx: &Ctx,
         mm: &ModelManager,
-        username: String,
+        filter_document: impl Into<Document>,
     ) -> Result<Vec<UserModel>> {
-        let users: Vec<_> = mm
-            .users
-            .find(doc! { "username": username.clone() })
-            .await?
-            .collect()
-            .await;
+        find_many::<Self, _>(ctx, &mm.users, filter_document).await
+    }
 
-        users
-            .into_iter()
-            .map(|r| r.map_err(Error::MongoDb))
-            .collect::<Result<Vec<_>>>()
+    pub async fn find_all(ctx: &Ctx, mm: &ModelManager) -> Result<Vec<UserModel>> {
+        find_all::<Self, _>(ctx, &mm.users).await
+    }
+
+    pub async fn delete_one(ctx: &Ctx, mm: &ModelManager, username: String) -> Result<()> {
+        delete_one::<Self, _>(ctx, &mm.users, doc! { "username": username }).await
+    }
+
+    pub async fn delete_many(
+        ctx: &Ctx,
+        mm: &ModelManager,
+        filter_document: impl Into<Document>,
+    ) -> Result<u64> {
+        delete_many::<Self, _>(ctx, &mm.users, filter_document).await
     }
 }
 
@@ -115,6 +98,12 @@ impl UserModel {
     }
 }
 
+impl From<UserForCreate> for UserModel {
+    fn from(value: UserForCreate) -> Self {
+        UserModel::new(value.username, value.password, value.email)
+    }
+}
+
 pub struct UserForCreate {
     pub username: String,
     pub password: String,
@@ -123,15 +112,85 @@ pub struct UserForCreate {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use anyhow::Result;
     use bson::oid::ObjectId;
-    use rstest::rstest;
+    use rstest::*;
+    use serial_test::serial;
     use similar_asserts::assert_eq;
 
     use crate::{
-        ctx::{Ctx, UserInfo},
-        model::user::{ModelManager, UserBmc, UserForCreate},
+        ctx::Ctx,
+        model::{
+            bmc_base::base_functions::Bmc,
+            user::{ModelManager, UserBmc, UserForCreate},
+            Error,
+        },
     };
+
+    #[rstest::fixture]
+    fn fx_root_ctx() -> Ctx {
+        Ctx::root_ctx()
+    }
+
+    #[rstest::fixture]
+    async fn fx_mm() -> ModelManager {
+        ModelManager::new()
+            .await
+            .expect("fixture ModelManager can be created")
+    }
+
+    #[rstest::fixture]
+    async fn fx_create_test_user(
+        #[default("create_test_user_default-username")] username: impl Into<String>,
+        #[default("create_test_user_default-password")] password: impl Into<String>,
+        #[default("create_test_user_default-email")] email: impl Into<String>,
+        #[future] fx_mm: ModelManager,
+        fx_root_ctx: Ctx,
+    ) -> ObjectId {
+        let username = username.into();
+
+        UserBmc::create(
+            &fx_root_ctx,
+            &fx_mm.await,
+            UserForCreate {
+                username: username.clone(),
+                password: password.into(),
+                email: email.into(),
+            },
+        )
+        .await
+        .unwrap_or_else(|_| panic!("fixture user '{username}' should be created successfully"))
+    }
+
+    #[rstest::fixture]
+    async fn fx_create_test_users(
+        #[default(1)] user_count: usize,
+        #[future] fx_mm: ModelManager,
+        fx_root_ctx: Ctx,
+    ) -> Vec<String> {
+        let mut ids = vec![];
+        let mm_arc = Arc::new(fx_mm.await);
+
+        for i in 0..user_count {
+            let username = format!("test_user-username-{i}");
+            let _ = UserBmc::create(
+                &fx_root_ctx,
+                &mm_arc,
+                UserForCreate {
+                    username: username.clone(),
+                    password: format!("test_user-password-{i}"),
+                    email: format!("test_user-email-{i}"),
+                },
+            )
+            .await
+            .unwrap_or_else(|_| panic!("fixture user '{username}' should be created successfully"));
+            ids.push(username.clone());
+        }
+
+        ids
+    }
 
     #[rstest]
     #[case(
@@ -139,23 +198,21 @@ mod tests {
         "bmc_user_create password_ok",
         "bmc_user_create email_ok"
     )]
+    #[serial]
+    #[tokio::test]
     async fn test_bmc_user_create_ok(
+        #[future] fx_mm: ModelManager,
+        fx_root_ctx: Ctx,
         #[case] username: &str,
         #[case] password: &str,
         #[case] email: &str,
     ) -> Result<()> {
         // Arrange
-
-        let ctx = Ctx::new(&UserInfo::new(
-            ObjectId::new(),
-            "root",
-            Some("test_agent".to_string()),
-        ))?;
-        let mm = ModelManager::new().await?;
+        let mm = fx_mm.await;
 
         // Act
         let id = UserBmc::create(
-            &ctx,
+            &fx_root_ctx,
             &mm,
             UserForCreate {
                 username: username.to_string(),
@@ -167,13 +224,137 @@ mod tests {
         .unwrap();
 
         // Assert
-        let user = UserBmc::get_one_username(&ctx, &mm, username)
+        let user = UserBmc::find_one_username(&fx_root_ctx, &mm, username)
             .await
             .unwrap();
         assert_eq!(id, user._id);
         assert_eq!(user.username, username);
         assert_eq!(user.password, password);
         assert_eq!(user.email, email);
+
+        // Cleanup
+        assert!(
+            UserBmc::delete_one(&fx_root_ctx, &mm, username.to_string())
+                .await
+                .is_ok(),
+            "cleanup should succeed"
+        );
+
+        Ok(())
+    }
+
+    #[rstest]
+    #[case(
+        "bmc_user_get_one_username username_ok",
+        "bmc_user_get_one_username password_ok",
+        "bmc_user_get_one_username email_ok"
+    )]
+    #[serial]
+    #[tokio::test]
+    async fn test_bmc_user_get_one_username_ok(
+        #[case] username: &str,
+        #[case] password: &str,
+        #[case] email: &str,
+        #[future]
+        #[with(username, password, email)]
+        fx_create_test_user: ObjectId,
+        #[future] fx_mm: ModelManager,
+        fx_root_ctx: Ctx,
+    ) -> Result<()> {
+        // Arrange
+        let mm = fx_mm.await;
+        let test_user_id = fx_create_test_user.await;
+
+        // Act
+        let user = UserBmc::find_one_username(&fx_root_ctx, &mm, username)
+            .await
+            .unwrap();
+
+        // Assert
+        assert_eq!(test_user_id, user._id);
+        assert_eq!(user.username, username);
+        assert_eq!(user.password, password);
+        assert_eq!(user.email, email);
+
+        // Cleanup
+        UserBmc::delete_one(&fx_root_ctx, &mm, username.to_string()).await?;
+
+        Ok(())
+    }
+
+    #[rstest]
+    #[serial]
+    #[tokio::test]
+    async fn test_get_all_users(
+        #[future]
+        #[with(3)]
+        fx_create_test_users: Vec<String>,
+        #[future] fx_mm: ModelManager,
+        fx_root_ctx: Ctx,
+    ) -> Result<()> {
+        // Arrange
+        let mm = fx_mm.await;
+        let fx_usernames = fx_create_test_users.await;
+
+        // Act
+        let users = UserBmc::find_all(&fx_root_ctx, &mm)
+            .await
+            .expect("cleanup can delete user model");
+
+        // Adjust
+        let users = users
+            .iter()
+            .filter(|u| u.username.contains("test_user"))
+            .collect::<Vec<_>>();
+
+        // Assert
+        assert_eq!(users.len(), 3);
+
+        // Cleanup
+        for username in fx_usernames {
+            UserBmc::delete_one(&fx_root_ctx, &mm, username).await?;
+        }
+
+        Ok(())
+    }
+
+    #[rstest]
+    #[case(
+        "bmc_user_delete_ok-username",
+        "bmc_user_delete_ok-password",
+        "bmc_user_delete_ok-email"
+    )]
+    #[serial]
+    #[tokio::test]
+    async fn test_bmc_user_delete_ok(
+        #[case] username: &str,
+        #[allow(unused_variables)]
+        #[case]
+        password: &str,
+        #[allow(unused_variables)]
+        #[case]
+        email: &str,
+        #[future]
+        #[with(username, password, email)]
+        fx_create_test_user: ObjectId,
+        #[future] fx_mm: ModelManager,
+        fx_root_ctx: Ctx,
+    ) -> Result<()> {
+        // Arrange
+        let mm = fx_mm.await;
+        let _ = fx_create_test_user.await;
+
+        // Act
+        let deleted_result = UserBmc::delete_one(&fx_root_ctx, &mm, username.to_string()).await;
+
+        // Assert
+        assert!(deleted_result.is_ok());
+        assert!(matches!(
+            UserBmc::find_one_username(&fx_root_ctx, &mm, username).await,
+            Err(Error::EntityNotFound {
+                collection_name: UserBmc::COLLECTION_NAME
+            })
+        ));
 
         Ok(())
     }

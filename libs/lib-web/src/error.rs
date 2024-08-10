@@ -8,7 +8,7 @@ use derive_more::derive::From;
 use serde::Serialize;
 use serde_with::serde_as;
 
-use crate::middleware::ctx_require;
+use crate::CtxExtError;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -16,7 +16,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug, Serialize, From)]
 pub enum Error {
     #[from]
-    CtxExt(ctx_require::CtxExtError),
+    CtxExt(CtxExtError),
 }
 
 impl IntoResponse for Error {

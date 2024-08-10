@@ -1,3 +1,4 @@
+use bson::Bson;
 use derive_more::derive::From;
 use serde::Serialize;
 use serde_with::{serde_as, DisplayFromStr};
@@ -7,19 +8,23 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[serde_as]
 #[derive(Debug, Serialize, From)]
 pub enum Error {
-    UserAlreadyExists {
-        username: String,
+    NonRootCantCreateEntity {
+        collection_name: &'static str,
     },
-    NonRootUserCantCreate,
 
-    SessionAlreadyExists,
+    InsertedIdNotObjectId {
+        inserted_id: Bson,
+    },
 
-    EntityNotFound,
-
-    InvalidObjectIdInserted,
+    EntityAlreadyExists {
+        collection_name: &'static str,
+    },
+    EntityNotFound {
+        collection_name: &'static str,
+    },
 
     #[from]
-    MongoDb(#[serde_as(as = "DisplayFromStr")] mongodb::error::Error),
+    Mongo(#[serde_as(as = "DisplayFromStr")] mongodb::error::Error),
 
     #[from]
     Bson(#[serde_as(as = "DisplayFromStr")] bson::ser::Error),

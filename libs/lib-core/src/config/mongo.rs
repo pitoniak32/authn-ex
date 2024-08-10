@@ -1,21 +1,25 @@
 use mongodb::{Client, Collection};
 
-use crate::model::{session::UserSessionModel, UserModel};
+use crate::model::{UserModel, UserSessionModel};
 
-use super::env_key::APP_NAME;
+use super::get_config;
 
-pub const MONGO_DB_NAME: &str = APP_NAME;
 pub const MONGO_COLL_NAME_USER_SESSIONS: &str = "user_sessions";
 pub const MONGO_COLL_NAME_USERS: &str = "users";
 
-pub async fn init_mongo(uri: &str) -> mongodb::Client {
+pub async fn init_mongo() -> mongodb::Client {
     // TODO: add way to timeout if mongo does not connect.
-    let client = mongodb::Client::with_uri_str(uri)
+    let client = mongodb::Client::with_uri_str(&get_config().MONGO_DB_URI)
         .await
-        .expect("failed to connect");
+        .unwrap_or_else(|_| {
+            panic!(
+                "failed to connect to mongo with uri: {}",
+                get_config().MONGO_DB_URI
+            )
+        });
 
     client
-        .database(MONGO_DB_NAME)
+        .database(&get_config().MONGO_DB_NAME)
         .collection::<UserModel>(MONGO_COLL_NAME_USERS)
         .create_index(
             mongodb::IndexModel::builder()
@@ -34,7 +38,7 @@ pub async fn init_mongo(uri: &str) -> mongodb::Client {
         });
 
     client
-        .database(MONGO_DB_NAME)
+        .database(&get_config().MONGO_DB_NAME)
         .collection::<UserSessionModel>(MONGO_COLL_NAME_USER_SESSIONS)
         .create_index(
             mongodb::IndexModel::builder()
@@ -57,12 +61,12 @@ pub async fn init_mongo(uri: &str) -> mongodb::Client {
 
 pub fn get_users_collection(client: &Client) -> Collection<UserModel> {
     client
-        .database(MONGO_DB_NAME)
+        .database(&get_config().MONGO_DB_NAME)
         .collection(MONGO_COLL_NAME_USERS)
 }
 
 pub fn get_sessions_collection(client: &Client) -> Collection<UserSessionModel> {
     client
-        .database(MONGO_DB_NAME)
+        .database(&get_config().MONGO_DB_NAME)
         .collection(MONGO_COLL_NAME_USER_SESSIONS)
 }

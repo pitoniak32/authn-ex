@@ -1,0 +1,7 @@
+[env]
+OTEL_COLLECTOR_URI="grpc://localhost:4317"
+DEV_MODE="true"
+
+MONGO_DB_URI="mongodb://0.0.0.0:27017"
+MONGO_DB_NAME="authn-ex"
+

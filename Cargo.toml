@@ -31,6 +31,7 @@ axum = { version = "0.7.5", features = ["macros"] }
 tower-http = { version = "0.5.2", features = ["trace"] }
 tower-cookies = { version = "0.10.0" }
 ring = "0.17.7"
+async-trait = "0.1"
 
 passkey = "0.2.0"
 base64 = "0.22.1"
@@ -60,6 +61,7 @@ futures = "0.3.30"
 # BEGIN TESTING
 async-std = { version = "1.12.0", features = ["attributes"] }
 insta = "1.39.0"
-rstest = "0.21.0"
+rstest = "0.22.0"
 similar-asserts = "1.5.0"
+serial_test = "3.1.1"
 # END TESTING

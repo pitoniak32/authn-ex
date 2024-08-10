@@ -9,8 +9,8 @@ use axum::{
 
 use futures::StreamExt;
 use lib_core::{
-    model::model_manager::ModelManager,
-    token::{claims::RefreshClaims, COOKIE_ACCESS_TOKEN_KEY, COOKIE_REFRESH_TOKEN_KEY},
+    model::ModelManager,
+    token::{RefreshClaims, COOKIE_ACCESS_TOKEN_KEY, COOKIE_REFRESH_TOKEN_KEY},
 };
 use mongodb::bson::doc;
 use tower_cookies::Cookies;
@@ -29,15 +29,13 @@ pub async fn logout(State(mm): State<ModelManager>, jar: Cookies) -> Result<Resp
         let refresh_claims =
             RefreshClaims::from_str(tok.as_str()).map_err(|_| Error::InvalidToken)?;
 
-        let sessions: Vec<_> = mm
-            .sessions
+        let _: Vec<_> = mm
+            .user_sessions
             .find(doc! { "username": refresh_claims.user.username })
             .await
             .map_err(|_| Error::WrongCredentials)?
             .collect()
             .await;
-
-        for session in sessions {}
     } else {
         return Ok((
             StatusCode::BAD_REQUEST,

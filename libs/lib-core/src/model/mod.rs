@@ -1,9 +1,12 @@
-pub mod error;
+mod bmc_base;
+mod error;
+mod model_manager;
 
-pub mod model_manager;
-pub mod session;
-pub mod user;
-pub mod util;
+mod session;
+mod user;
 
+pub use bmc_base::*;
 pub use error::*;
+pub use model_manager::*;
+pub use session::*;
 pub use user::*;

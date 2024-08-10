@@ -1,0 +1,32 @@
+---
+source: libs/lib-core/src/token/cookies.rs
+expression: cookie
+---
+Cookie {
+    cookie_string: None,
+    name: Concrete(
+        "TEST_ACCESS_TOKEN_KEY",
+    ),
+    value: Concrete(
+        "test_get_token_cookie ok",
+    ),
+    expires: None,
+    max_age: Some(
+        Duration {
+            seconds: 999999,
+            nanoseconds: 0,
+        },
+    ),
+    domain: None,
+    path: Some(
+        Concrete(
+            "/",
+        ),
+    ),
+    secure: None,
+    http_only: Some(
+        true,
+    ),
+    same_site: None,
+    partitioned: None,
+}

@@ -7,15 +7,10 @@ use axum::{
 };
 use lib_core::{
     ctx::{Ctx, UserInfo},
-    model::{
-        model_manager::ModelManager,
-        session::{SessionForCreate, UserSessionBmc},
-        UserBmc,
-    },
+    model::{ModelManager, UserBmc, UserSessionBmc, UserSessionForCreate},
     token::{
-        get_access_token, get_refresh_token, get_token_cookie,
-        keys::{ACCESS_TOKEN_EXPIRATION, KEYS, REFRESH_TOKEN_EXPIRATION},
-        COOKIE_ACCESS_TOKEN_KEY, COOKIE_REFRESH_TOKEN_KEY,
+        get_token_cookie, AccessClaims, RefreshClaims, COOKIE_ACCESS_TOKEN_KEY,
+        COOKIE_REFRESH_TOKEN_KEY,
     },
 };
 use mongodb::bson::doc;
@@ -30,7 +25,6 @@ pub struct DtoUserLogin {
 }
 
 #[tracing::instrument(skip_all)]
-#[axum::debug_handler]
 pub async fn login(
     mm: State<ModelManager>,
     headers: HeaderMap,
@@ -46,7 +40,7 @@ pub async fn login(
         .and_then(|agent| agent.to_str().ok())
         .map(String::from);
 
-    let user_model = UserBmc::get_one_username(&Ctx::root_ctx(), &mm, &user_form.username)
+    let user_model = UserBmc::find_one_username(&Ctx::root_ctx(), &mm, &user_form.username)
         .await
         .unwrap();
 
@@ -56,19 +50,22 @@ pub async fn login(
 
     let user = UserInfo::new(user_model._id, user_model.username, user_agent.clone());
 
-    let access_token = get_access_token(&user, &KEYS.encoding, *ACCESS_TOKEN_EXPIRATION)
-        .map_err(|_| Error::TokenCreation)?;
-    let refresh_token = get_refresh_token(&user, &KEYS.encoding, *REFRESH_TOKEN_EXPIRATION)
+    let access_claims = AccessClaims::new(user.clone());
+    let access_token = access_claims.tokenize().map_err(|_| Error::TokenCreation)?;
+    let refresh_claims = RefreshClaims::new(user);
+    let refresh_token = refresh_claims
+        .tokenize()
         .map_err(|_| Error::TokenCreation)?;
 
     UserSessionBmc::create(
         &Ctx::root_ctx(),
         &mm,
-        SessionForCreate {
+        UserSessionForCreate {
             user_id: user_model._id,
             user_agent,
             refresh_token: refresh_token.clone(),
             version: user_model.session_version,
+            expires_at_unix_secs: refresh_claims.exp,
         },
     )
     .await
