@@ -2,12 +2,10 @@
 resolver = "2"
 
 members = [
-    "client",
     "server",
     "libs/lib-core",
     "libs/lib-web",
 ]
-
 
 [workspace.dependencies]
 lib-core = { path = "libs/lib-core" }
